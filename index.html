@@ -41,6 +41,11 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
 .toast.show{opacity:1}small.lbl{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
 .hist{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px}
 .hist .d{font-weight:700}.hist .sum{color:var(--muted);font-size:13px;margin-top:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:14px}
+.setpills{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
+.setpill{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-weight:600;font-size:13px}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px}
+.statgrid b{font-size:17px}
 .banner{background:#2a2233;border:1px solid #4a3a5a;color:#e7d8ff;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px}
 .databtns{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
 @media(max-width:560px){.wrap{padding:12px}.chartbox{height:320px}.tab{padding:7px 10px;font-size:13px}}
@@ -64,6 +69,9 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
   </div>
   <div id="cards" class="cards"></div>
   <div class="chartbox"><canvas id="chart"></canvas></div>
+  <p class="hint" style="margin-top:8px">Tip: click any point on the graph to see that session's sets.</p>
+  <div class="panel" id="sessiondetail"></div>
+  <div class="panel" id="statsblock"></div>
   <p class="hint" id="dashhint"></p>
  </section>
  <section id="log" class="view">
@@ -204,6 +212,53 @@ function fillVariants(){
 }
 const METLABEL={e1rm:'Estimated 1RM (lbs)',topw:'Top-set weight (lbs)',vol:'Session volume (lbs)'};
 function lin(p){const n=p.length;if(n<2)return null;let sx=0,sy=0,sxy=0,sxx=0;p.forEach(q=>{sx+=q.x;sy+=q.y;sxy+=q.x*q.y;sxx+=q.x*q.x;});const s=(n*sxy-sx*sy)/(n*sxx-sx*sx||1);return{slope:s,int:(sy-s*sx)/n};}
+
+function matchingFor(){
+  const base=movesel.value,variant=varsel.value,out=[];
+  for(const w of RECORDS){
+    const exs=w.ex.filter(e=> variant==='__all__'? e.b===base : e.n===variant);
+    if(exs.length) out.push({d:w.d,bw:w.bw,note:w.note,exs});
+  }
+  return out;
+}
+function renderSession(iso){
+  const items=matchingFor().filter(x=>x.d===iso);
+  if(!items.length){$('#sessiondetail').innerHTML='<div class="k">Session</div><div class="muted">Click a point above.</div>';return;}
+  let html='<div class="k">Session — '+fmtD(iso)+'</div>';
+  items.forEach(it=>{
+    if(it.bw) html+='<div class="muted" style="font-size:13px;margin-top:2px">Bodyweight '+it.bw+' lbs</div>';
+    it.exs.forEach(e=>{
+      const flags=[e.lat==='single'?'single':'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+      let vol=0,best=0;e.s.forEach(([r,w])=>{vol+=r*w;const x=w*(1+r/30);if(x>best)best=x;});
+      html+='<div style="margin-top:10px"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>';
+      html+='<div class="setpills">'+e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>';
+      html+='<div class="muted" style="font-size:12px;margin-top:4px">est 1RM '+Math.round(best)+' · volume '+Math.round(vol).toLocaleString()+' lbs'+(e.no?' · 📝 '+e.no:'')+'</div>';
+    });
+    if(it.note) html+='<div class="muted" style="font-size:12px;margin-top:8px">📝 Workout: '+it.note+'</div>';
+  });
+  $('#sessiondetail').innerHTML=html;
+}
+function renderStats(){
+  const base=movesel.value,variant=varsel.value,items=matchingFor();
+  if(!items.length){$('#statsblock').innerHTML='';return;}
+  let sets=0,reps=0,vol=0,bestE=0,bestD='',bestSet='',topW=0,topD='';const days=[];
+  items.forEach(it=>{days.push(it.d);it.exs.forEach(e=>e.s.forEach(([r,w])=>{sets++;reps+=r;vol+=r*w;const x=w*(1+r/30);if(x>bestE){bestE=x;bestD=it.d;bestSet=r+' × '+(+w);}if(w>topW){topW=w;topD=it.d;}}));});
+  const uniq=[...new Set(days)].sort();const first=uniq[0],last=uniq[uniq.length-1];
+  const span=Math.round((new Date(last)-new Date(first))/864e5);
+  const freq=uniq.length>1?(span/(uniq.length-1)).toFixed(1):'—';
+  $('#statsblock').innerHTML='<div class="k">All-time stats — '+base+(variant!=='__all__'?' · '+variant:'')+'</div>'+
+   '<div class="statgrid">'+
+   '<div><span class="muted">Sessions</span><br><b>'+uniq.length+'</b></div>'+
+   '<div><span class="muted">Date range</span><br><b>'+fmtD(first)+' – '+fmtD(last)+'</b></div>'+
+   '<div><span class="muted">Avg every</span><br><b>'+freq+' days</b></div>'+
+   '<div><span class="muted">Total sets</span><br><b>'+sets+'</b></div>'+
+   '<div><span class="muted">Total reps</span><br><b>'+reps.toLocaleString()+'</b></div>'+
+   '<div><span class="muted">Total volume</span><br><b>'+Math.round(vol).toLocaleString()+' lbs</b></div>'+
+   '<div><span class="muted">Best est 1RM</span><br><b>'+Math.round(bestE)+'</b> <span class="muted">('+bestSet+', '+fmtD(bestD)+')</span></div>'+
+   '<div><span class="muted">Heaviest set</span><br><b>'+(+topW)+' lbs</b> <span class="muted">('+fmtD(topD)+')</span></div>'+
+   '</div>';
+}
+
 function draw(){
   const base=movesel.value,variant=varsel.value;
   let raw=(variant==='__all__')?SESS.filter(s=>s.b===base):SESS.filter(s=>s.n===variant);
@@ -228,6 +283,7 @@ function draw(){
    <div class="card"><div class="k">All-time best</div><div class="v">${Math.round(pr)}</div><div class="s">${fmtD(prRow.d)}${prRow.ts?' · '+prRow.ts:''}</div></div>
    <div class="card"><div class="k">Change</div><div class="v" style="color:${pct>=0?'var(--good)':'var(--push)'}">${pct>=0?'+':''}${pct}%</div><div class="s">${rows.length} sessions</div></div>
    <div class="card"><div class="k">Trend</div><div class="v" style="color:${perMonth>=0?'var(--good)':'var(--push)'}">${perMonth>=0?'+':''}${perMonth.toFixed(1)}</div><div class="s">per month</div></div>`;
+  renderStats();renderSession(rows[rows.length-1].d);
   $('#dashhint').textContent=(variant==='__all__'&&metric!=='vol')
     ?'Showing ALL variants combined — different machines have different weight scales, so this trend mixes them. Pick a Variant for a clean strength trend.'
     :metric==='e1rm'?'Est. 1RM = Epley (weight×(1+reps/30)) on your best set each session. Dashed line is a least-squares trend projected 120 days out.'
