@@ -359,7 +359,7 @@ const GH={
   gistId:()=>LS.get('lftng_gistid',''),
   hdr(){return{'Authorization':'token '+this.token(),'Accept':'application/vnd.github+json'};},
   async findGist(){
-    const r=await fetch('https://api.github.com/gists?per_page=100',{headers:this.hdr()});
+    const r=await fetch('https://api.github.com/gists?per_page=100&t='+Date.now(),{headers:this.hdr(),cache:'no-store'});
     if(!r.ok)throw new Error('Auth failed ('+r.status+') — check your token');
     const list=await r.json();
     const g=list.find(g=>g.files&&g.files['lftng_data.json']);
@@ -367,6 +367,7 @@ const GH={
   },
   async push(){
     if(!this.token())throw new Error('Set your token first');
+    if(!RECORDS.length)throw new Error('This device has no workouts — Pull first (refusing to overwrite cloud with empty data).');
     let id=this.gistId()||await this.findGist();
     const body={description:'LFTNG workout data',files:{'lftng_data.json':{content:JSON.stringify(RECORDS)}}};
     let r;
@@ -380,11 +381,12 @@ const GH={
     if(!this.token())throw new Error('Set your token first');
     let id=this.gistId()||await this.findGist();
     if(!id)throw new Error('No cloud data found yet — Push from your main device first');
-    const r=await fetch('https://api.github.com/gists/'+id,{headers:this.hdr()});
+    const r=await fetch('https://api.github.com/gists/'+id+'?t='+Date.now(),{headers:this.hdr(),cache:'no-store'});
     if(!r.ok)throw new Error('Pull failed ('+r.status+')');
     const d=await r.json();const f=d.files['lftng_data.json'];
-    let content=f.content; if(f.truncated){content=await (await fetch(f.raw_url)).text();}
+    let content=f.content; if(f.truncated){content=await (await fetch(f.raw_url+'?t='+Date.now(),{cache:'no-store'})).text();}
     const data=JSON.parse(content); if(!Array.isArray(data))throw new Error('Cloud data is invalid');
+    if(data.length===0 && RECORDS.length>0){throw new Error('Cloud is empty but this device has '+RECORDS.length+' workouts — not overwriting. Push from here to restore the cloud.');}
     LS.set('lftng_gistid',id);RECORDS=data;persist();refreshDashboard();LS.set('lftng_synced',new Date().toISOString());
     return RECORDS.length;
   }
