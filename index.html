@@ -116,8 +116,10 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
   <p class="hint">Your workouts live in this browser. Export a backup regularly (save it in your LFTNG folder). To move devices or recover, import a backup file.</p>
   <div class="databtns">
    <button class="primary" id="expjson">⬇ Export backup (.json)</button>
-   <label class="ghost" style="display:inline-flex;align-items:center;padding:9px 11px;border-radius:9px;cursor:pointer">⬆ Import backup<input type="file" id="impjson" accept=".json" style="display:none"></label>
+   <label class="ghost" style="display:inline-flex;align-items:center;padding:9px 11px;border-radius:9px;cursor:pointer">⬆ Import backup (replace)<input type="file" id="impjson" accept=".json" style="display:none"></label>
+   <label class="ghost" style="display:inline-flex;align-items:center;padding:9px 11px;border-radius:9px;cursor:pointer">➕ Import &amp; merge (add)<input type="file" id="mergejson" accept=".json" style="display:none"></label>
   </div>
+  <p class="hint">"Replace" swaps in a whole backup. "Merge" adds the workouts from a file to what you already have (duplicates are skipped) — use this to fold in batches like exported Keep notes.</p>
   <h3 style="margin-top:22px">Share data</h3>
   <p class="hint">Export to Excel for quick sharing or your own analysis.</p>
   <div class="databtns">
@@ -222,22 +224,33 @@ function matchingFor(){
   }
   return out;
 }
+let curIso=null, fullDay=false;
+function exRowHtml(e,dim){
+  const flags=[e.lat==='single'?'single':'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+  let vol=0,best=0;e.s.forEach(([r,w])=>{vol+=r*w;const x=w*(1+r/30);if(x>best)best=x;});
+  return '<div style="margin-top:10px'+(dim?';opacity:.6':'')+'"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
+    '<div class="setpills">'+e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>'+
+    '<div class="muted" style="font-size:12px;margin-top:4px">est 1RM '+Math.round(best)+' · volume '+Math.round(vol).toLocaleString()+' lbs'+(e.no?' · 📝 '+e.no:'')+'</div>';
+}
 function renderSession(iso){
-  const items=matchingFor().filter(x=>x.d===iso);
-  if(!items.length){$('#sessiondetail').innerHTML='<div class="k">Session</div><div class="muted">Click a point above.</div>';return;}
-  let html='<div class="k">Session — '+fmtD(iso)+'</div>';
-  items.forEach(it=>{
-    if(it.bw) html+='<div class="muted" style="font-size:13px;margin-top:2px">Bodyweight '+it.bw+' lbs</div>';
-    it.exs.forEach(e=>{
-      const flags=[e.lat==='single'?'single':'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
-      let vol=0,best=0;e.s.forEach(([r,w])=>{vol+=r*w;const x=w*(1+r/30);if(x>best)best=x;});
-      html+='<div style="margin-top:10px"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>';
-      html+='<div class="setpills">'+e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>';
-      html+='<div class="muted" style="font-size:12px;margin-top:4px">est 1RM '+Math.round(best)+' · volume '+Math.round(vol).toLocaleString()+' lbs'+(e.no?' · 📝 '+e.no:'')+'</div>';
-    });
-    if(it.note) html+='<div class="muted" style="font-size:12px;margin-top:8px">📝 Workout: '+it.note+'</div>';
+  if(iso)curIso=iso; iso=curIso;
+  if(!iso){$('#sessiondetail').innerHTML='<div class="k">Session</div><div class="muted">Click a point above.</div>';return;}
+  const base=movesel.value,variant=varsel.value;
+  const day=RECORDS.filter(w=>w.d===iso);
+  if(!day.length){$('#sessiondetail').innerHTML='<div class="k">Session</div><div class="muted">No data.</div>';return;}
+  const isSel=e=> variant==='__all__'? e.b===base : e.n===variant;
+  const toggle='<button class="flagbtn'+(fullDay?' on':'')+'" id="fulldaybtn" style="float:right;margin-top:-2px">'+(fullDay?'Full day ✓':'Full day')+'</button>';
+  let html='<div class="k">Session — '+fmtD(iso)+toggle+'</div>';
+  day.forEach(w=>{
+    if(w.bw) html+='<div class="muted" style="font-size:13px;margin-top:2px">Bodyweight '+w.bw+' lbs</div>';
+    const exs = fullDay ? w.ex : w.ex.filter(isSel);
+    exs.forEach(e=> html+=exRowHtml(e, fullDay && !isSel(e)) );
+    if(w.note) html+='<div class="muted" style="font-size:12px;margin-top:8px">📝 Workout: '+w.note+'</div>';
   });
+  if(!fullDay){const others=day.flatMap(w=>w.ex).filter(e=>!isSel(e)).map(e=>e.n);
+    if(others.length) html+='<div class="muted" style="font-size:12px;margin-top:10px">Also that day: '+[...new Set(others)].join(', ')+'</div>';}
   $('#sessiondetail').innerHTML=html;
+  const btn=$('#fulldaybtn'); if(btn) btn.onclick=()=>{fullDay=!fullDay;renderSession();};
 }
 function renderStats(){
   const base=movesel.value,variant=varsel.value,items=matchingFor();
@@ -326,11 +339,22 @@ function updateLast(bl){
   if(!list.length){el.style.display='block';el.innerHTML='<span class="muted">No previous data for this exercise yet.</span>';return;}
   const top=list[0];
   const days=Math.max(0,Math.round((Date.now()-new Date(top.d).getTime())/864e5));
-  let best=0;top.e.s.forEach(([r,w])=>{const x=w*(1+r/30);if(x>best)best=x;});
+  const mode=bl.dataset.lastview||'last';
+  const pills=s=>'<div class="setpills">'+s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>';
+  const toggle='<div class="row" style="gap:6px;margin-bottom:8px;align-items:center">'+
+    '<button class="flagbtn lv'+(mode==='last'?' on':'')+'" data-m="last">Last time</button>'+
+    '<button class="flagbtn lv'+(mode==='full'?' on':'')+'" data-m="full">Entire workout</button>'+
+    '<span class="muted" style="font-size:12px">'+fmtD(top.d)+' · '+days+'d ago</span></div>';
+  let body='';
+  if(mode==='full'){
+    RECORDS.filter(w=>w.d===top.d).forEach(w=>{w.ex.forEach(e=>{
+      body+='<div style="margin-top:8px"><b>'+e.n+'</b></div>'+pills(e.s);});});
+  }else{
+    body='<div><b>'+top.e.n+'</b>'+(exact?'':' <span class="muted">[as logged]</span>')+'</div>'+pills(top.e.s);
+  }
   el.style.display='block';
-  el.innerHTML='<b>Last time</b> · '+days+'d ago ('+fmtD(top.d)+')'+(exact?'':' <span class="muted">[as “'+top.e.n+'”]</span>')+
-    '<div class="setpills">'+top.e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>'+
-    '<span class="muted" style="font-size:12px">est 1RM '+Math.round(best)+' · done '+list.length+'×'+(top.e.no?' · 📝 '+top.e.no:'')+'</span>';
+  el.innerHTML=toggle+body;
+  el.querySelectorAll('.lv').forEach(b=>b.onclick=()=>{bl.dataset.lastview=b.dataset.m;updateLast(bl);});
 }
 
 function addExercise(pre){
@@ -430,6 +454,8 @@ function renderData(){
 }
 $('#expjson').onclick=()=>{dl('lftng_backup_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(RECORDS),'application/json');toast('Backup exported');};
 $('#impjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d))throw 0;RECORDS=d;persist();refreshDashboard();toast('Imported '+d.length+' workouts');renderData();}catch(err){toast('Invalid backup file');}};rd.readAsText(f);};
+function sig(w){return w.d+'|'+w.ex.map(e=>e.n.toLowerCase()+':'+e.s.map(s=>s.join('x')).join(',')).join('|');}
+$('#mergejson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const inc=JSON.parse(rd.result);if(!Array.isArray(inc))throw 0;const have=new Set(RECORDS.map(sig));let added=0;inc.forEach(w=>{const s=sig(w);if(!have.has(s)){w.id=w.id||('m'+Date.now()+Math.random().toString(36).slice(2,6));RECORDS.push(w);have.add(s);added++;}});RECORDS.sort((a,b)=>a.d<b.d?-1:1);persist();refreshDashboard();toast('Merged '+added+' new workout'+(added===1?'':'s'));autoPush();renderData();}catch(err){toast('Invalid merge file');}};rd.readAsText(f);};
 function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',single:e.lat==='single'?'yes':'',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10,exercise_note:e.no||'',workout_note:w.note||''}))));return rows;}
 function summaryRows(){
   const ss=buildSessions(),by={};
