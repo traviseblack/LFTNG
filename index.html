@@ -150,6 +150,23 @@ function load(){
   buildNameMap();
 }
 function buildNameMap(){NAMEMAP={};for(const w of RECORDS)for(const e of w.ex)NAMEMAP[e.n.toLowerCase()]=[e.b,e.c,e.m];}
+const GRIP_TESTS=[[/\b(hammer grip|hammer|hg)\b/ig,'hammer'],[/\b(uh grip|underhand|uh|supinated)\b/ig,'underhand'],[/\b(reverse grip|reverse)\b/ig,'reverse'],[/\b(overhand|oh grip|oh|pronated)\b/ig,'']];
+function extractGrip(name){
+  let grip='', n=' '+name+' ';
+  for(const [re,g] of GRIP_TESTS){ if(re.test(n)){ if(grip==='')grip=g; n=n.replace(re,' '); } }
+  n=n.replace(/\s+/g,' ').trim();
+  return {name:n||name, grip};
+}
+function migrateGrip(){
+  let changed=0;
+  for(const w of RECORDS) for(const e of w.ex){
+    if(e.grip!==undefined && e.grip!=='' ) continue;   // already has explicit grip
+    const ex=extractGrip(e.n);
+    if(ex.grip || ex.name!==e.n){ if(ex.grip) e.grip=ex.grip; e.n=ex.name; changed++; }
+  }
+  if(changed){persist();}
+  return changed;
+}
 function persist(){ LS.set('lftng_records',JSON.stringify(RECORDS)); buildNameMap(); }
 
 /* ---- JS tagger for NEW exercise names ---- */
@@ -199,7 +216,7 @@ function refreshMovements(){
   movesel.innerHTML=list.map(m=>`<option value="${m.name.replace(/"/g,'&quot;')}">${m.name} (${m.sessions})</option>`).join('');
   if(cur&&list.some(m=>m.name===cur))movesel.value=cur;
   // refresh autocomplete datalist (all known names + bases)
-  const clean=n=>n.replace(/^[^a-z0-9]+/i,'').replace(/\b([12][abhl])\b\s*[-:]?\s*/gi,'').replace(/\b(single (arm|leg|side)s?|one arm|two arm)\b/gi,'').replace(/\s+/g,' ').trim();
+  const clean=n=>n.replace(/^[^a-z0-9]+/i,'').replace(/\b([12][abhl])\b\s*[-:]?\s*/gi,'').replace(/\b(single (arm|leg|side)s?|one arm|two arm)\b/gi,'').replace(/\b(hammer grip|hammer|hg|uh grip|underhand|uh|supinated|reverse grip|reverse|overhand|oh grip|oh|pronated)\b/gi,'').replace(/\s+/g,' ').trim();
   const seen={},out=[];
   const add=n=>{const c=clean(n),k=c.toLowerCase();if(c&&!seen[k]){seen[k]=1;out.push(c);}};
   SESS.forEach(s=>add(s.n));Object.keys(NAMEMAP).forEach(add);   // SESS first keeps original casing
@@ -226,7 +243,7 @@ function matchingFor(){
 }
 let curIso=null, fullDay=false;
 function exRowHtml(e,dim){
-  const flags=[e.lat==='single'?'single':'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+  const flags=[e.lat==='single'?'single':'',e.grip||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
   let vol=0,best=0;e.s.forEach(([r,w])=>{vol+=r*w;const x=w*(1+r/30);if(x>best)best=x;});
   return '<div style="margin-top:10px'+(dim?';opacity:.6':'')+'"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
     '<div class="setpills">'+e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>'+
@@ -365,12 +382,13 @@ function addExercise(pre){
    <input type="number" class="ssnum" min="1" placeholder="#" style="width:54px;display:none">
    <button class="flagbtn kg" title="entered in kg → convert to lbs">kg</button>
    <button class="flagbtn single" title="single-limb (one arm / one leg)">Single</button>
+   <select class="grip" title="grip"><option value="">Grip: regular</option><option value="hammer">Hammer</option><option value="underhand">Underhand</option><option value="reverse">Reverse</option></select>
    <button class="rm" title="remove exercise">🗑</button></div>
    <div class="lastinfo"></div>
    <div class="sets"></div><button class="ghost addset" style="font-size:13px;padding:6px 10px">+ set</button>
    <input type="text" class="exnote" placeholder="note (optional) — e.g. left shoulder sore" style="width:100%;margin-top:8px">`;
   const sets=bl.querySelector('.sets');
-  if(pre){bl.querySelector('.exname').value=pre.n;if(pre.no)bl.querySelector('.exnote').value=pre.no;if(pre.ss){bl.querySelector('.ss').classList.add('on');bl.querySelector('.ssnum').style.display='inline-block';bl.querySelector('.ssnum').value=pre.ss.replace('SS','');}if(pre.lat==='single')bl.querySelector('.single').classList.add('on');pre.s.forEach(([r,w])=>sets.appendChild(setRow(r,w)));}
+  if(pre){bl.querySelector('.exname').value=pre.n;if(pre.no)bl.querySelector('.exnote').value=pre.no;if(pre.ss){bl.querySelector('.ss').classList.add('on');bl.querySelector('.ssnum').style.display='inline-block';bl.querySelector('.ssnum').value=pre.ss.replace('SS','');}if(pre.lat==='single')bl.querySelector('.single').classList.add('on');if(pre.grip)bl.querySelector('.grip').value=pre.grip;pre.s.forEach(([r,w])=>sets.appendChild(setRow(r,w)));}
   else{sets.appendChild(setRow());sets.appendChild(setRow());}
   bl.querySelector('.addset').onclick=()=>{sets.appendChild(setRow());renumber();};
   bl.querySelector('.rm').onclick=()=>bl.remove();
@@ -391,6 +409,7 @@ function gatherWorkout(){
     const ssOn=bl.querySelector('.ss').classList.contains('on'),ssNum=bl.querySelector('.ssnum').value.trim();
     const kgOn=bl.querySelector('.kg').classList.contains('on');
     const singleOn=bl.querySelector('.single').classList.contains('on');
+    const gripSel=bl.querySelector('.grip').value;
     const sets=[];
     bl.querySelectorAll('.setrow').forEach(sr=>{
       const r=sr.querySelector('.reps').value.trim(),w=sr.querySelector('.wt').value.trim();
@@ -398,9 +417,10 @@ function gatherWorkout(){
       sets.push([parseInt(r||0),wt]);
     });
     if(!sets.length)return;
-    const tg=tagExercise(name);
+    const gx=extractGrip(name); const cleanName=gx.name; const grip=gripSel||gx.grip||'';
+    const tg=tagExercise(cleanName);
     const note=bl.querySelector('.exnote').value.trim();
-    ex.push({n:name,b:tg.b,c:tg.c,m:tg.m,ss:ssOn?('SS'+ssNum):'',u:kgOn?'kg':'lb',lat:singleOn?'single':'',s:sets,no:note});
+    ex.push({n:cleanName,b:tg.b,c:tg.c,m:tg.m,ss:ssOn?('SS'+ssNum):'',u:kgOn?'kg':'lb',lat:singleOn?'single':'',grip:grip,s:sets,no:note});
   });
   if(!ex.length)return null;
   const wnote=$('#wnote').value.trim();
@@ -453,10 +473,10 @@ function renderData(){
   $('#storestatus').textContent='Storage: this browser. Last action saved automatically. Export a backup to be safe.';
 }
 $('#expjson').onclick=()=>{dl('lftng_backup_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(RECORDS),'application/json');toast('Backup exported');};
-$('#impjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d))throw 0;RECORDS=d;persist();refreshDashboard();toast('Imported '+d.length+' workouts');renderData();}catch(err){toast('Invalid backup file');}};rd.readAsText(f);};
+$('#impjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d))throw 0;RECORDS=d;migrateGrip();persist();refreshDashboard();toast('Imported '+d.length+' workouts');renderData();}catch(err){toast('Invalid backup file');}};rd.readAsText(f);};
 function sig(w){return w.d+'|'+w.ex.map(e=>e.n.toLowerCase()+':'+e.s.map(s=>s.join('x')).join(',')).join('|');}
-$('#mergejson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const inc=JSON.parse(rd.result);if(!Array.isArray(inc))throw 0;const have=new Set(RECORDS.map(sig));let added=0;inc.forEach(w=>{const s=sig(w);if(!have.has(s)){w.id=w.id||('m'+Date.now()+Math.random().toString(36).slice(2,6));RECORDS.push(w);have.add(s);added++;}});RECORDS.sort((a,b)=>a.d<b.d?-1:1);persist();refreshDashboard();toast('Merged '+added+' new workout'+(added===1?'':'s'));autoPush();renderData();}catch(err){toast('Invalid merge file');}};rd.readAsText(f);};
-function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',single:e.lat==='single'?'yes':'',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10,exercise_note:e.no||'',workout_note:w.note||''}))));return rows;}
+$('#mergejson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const inc=JSON.parse(rd.result);if(!Array.isArray(inc))throw 0;const have=new Set(RECORDS.map(sig));let added=0;inc.forEach(w=>{const s=sig(w);if(!have.has(s)){w.id=w.id||('m'+Date.now()+Math.random().toString(36).slice(2,6));RECORDS.push(w);have.add(s);added++;}});migrateGrip();RECORDS.sort((a,b)=>a.d<b.d?-1:1);persist();refreshDashboard();toast('Merged '+added+' new workout'+(added===1?'':'s'));autoPush();renderData();}catch(err){toast('Invalid merge file');}};rd.readAsText(f);};
+function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',single:e.lat==='single'?'yes':'',grip:e.grip||'regular',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10,exercise_note:e.no||'',workout_note:w.note||''}))));return rows;}
 function summaryRows(){
   const ss=buildSessions(),by={};
   ss.forEach(s=>{const g=by[s.b]||(by[s.b]={base_exercise:s.b,category:s.c,modality:s.m,sessions:new Set(),sets:0,best_e1rm:0,best_date:'',top_weight:0,latest_e1rm:0,latest_date:''});
@@ -508,7 +528,7 @@ const GH={
     let content=f.content; if(f.truncated){content=await (await fetch(f.raw_url+'?t='+Date.now(),{cache:'no-store'})).text();}
     const data=JSON.parse(content); if(!Array.isArray(data))throw new Error('Cloud data is invalid');
     if(data.length===0 && RECORDS.length>0){throw new Error('Cloud is empty but this device has '+RECORDS.length+' workouts — not overwriting. Push from here to restore the cloud.');}
-    LS.set('lftng_gistid',id);RECORDS=data;persist();refreshDashboard();LS.set('lftng_synced',new Date().toISOString());
+    LS.set('lftng_gistid',id);RECORDS=data;migrateGrip();persist();refreshDashboard();LS.set('lftng_synced',new Date().toISOString());
     return RECORDS.length;
   }
 };
@@ -524,5 +544,5 @@ $('#pullcloud').onclick=async()=>{try{toast('Pulling…');const n=await GH.pull(
 function autoPush(){if(GH.token())GH.push().then(()=>renderSync()).catch(e=>toast('Auto-sync: '+e.message));}
 
 /* ---- init ---- */
-load();resetLogger();refreshDashboard();
+load();migrateGrip();resetLogger();refreshDashboard();
 </script></body></html>
