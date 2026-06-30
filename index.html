@@ -43,6 +43,13 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
 .hist .d{font-weight:700}.hist .sum{color:var(--muted);font-size:13px;margin-top:2px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:14px}
 .lastinfo{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:8px 11px;margin-bottom:9px;font-size:13px;display:none}
+.acwrap{position:relative;flex:1;min-width:170px}
+.acwrap input{width:100%}
+.aclist{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:40;background:var(--panel2);border:1px solid var(--line);border-radius:9px;max-height:260px;overflow-y:auto;display:none;box-shadow:0 10px 28px rgba(0,0,0,.45)}
+.aclist.show{display:block}
+.acitem{padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--line);font-size:14px}
+.acitem:last-child{border-bottom:0}
+.acitem.active{background:var(--accent);color:#06101f}
 .setpills{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
 .setpill{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-weight:600;font-size:13px}
 .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px}
@@ -130,10 +137,10 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
  </section>
 </div>
 <div class="toast" id="toast"></div>
-<datalist id="movedl"></datalist>
 <script>
 const SEED=[], CATRULES=[["crunch", "misc"], ["oblique", "misc"], ["ab push", "misc"], ["back extension", "misc"], ["leg curl", "legs"], ["hamstring", "legs"], ["leg extension", "legs"], ["leg press", "legs"], ["hack squat", "legs"], ["squat shrug", "pull"], ["squat", "legs"], ["lunge", "legs"], ["glute", "legs"], ["kickback", "legs"], ["calf", "legs"], ["calve", "legs"], ["hip abduction", "legs"], ["hip adduction", "legs"], ["good girl", "legs"], ["bad girl", "legs"], ["deadlift", "legs"], ["sldl", "legs"], ["rdl", "legs"], ["quad", "legs"], ["rear delt", "pull"], ["row", "pull"], ["pulldown", "pull"], ["pull down", "pull"], ["pullover", "pull"], ["traction", "pull"], ["face pull", "pull"], ["shrug", "pull"], ["trap", "pull"], ["preacher", "pull"], ["biceps", "pull"], ["bicep", "pull"], ["crescent", "pull"], ["wrist", "pull"], ["chin", "pull"], ["high row", "pull"], ["pull", "pull"], ["chest", "push"], ["pec", "push"], ["flye", "push"], ["fly", "push"], ["triceps", "push"], ["tricep", "push"], ["pushdown", "push"], ["dip", "push"], ["shoulder press", "push"], ["overhead", "push"], ["ohp", "push"], ["skull", "push"], ["bench", "push"], ["front delt", "push"], ["side delt", "push"], ["rear delt", "pull"], ["delt raise", "push"], ["delt", "push"], ["lateral", "push"], ["lat raise", "push"], ["raise", "push"], ["press", "push"], ["twist", "misc"], ["curl", "pull"]];
 let NAMEMAP={};
+let SUGGEST=[];
 const $=s=>document.querySelector(s);
 const KGLB=2.20462;
 const CATCLASS={push:'cat-push',pull:'cat-pull',legs:'cat-legs',misc:'cat-misc'};
@@ -221,7 +228,7 @@ function refreshMovements(){
   const add=n=>{const c=clean(n),k=c.toLowerCase();if(c&&!seen[k]){seen[k]=1;out.push(c);}};
   SESS.forEach(s=>add(s.n));Object.keys(NAMEMAP).forEach(add);   // SESS first keeps original casing
   out.sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);
-  $('#movedl').innerHTML=out.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
+  SUGGEST=out;
 }
 function fillVariants(){
   const base=movesel.value,names={};
@@ -377,7 +384,7 @@ function updateLast(bl){
 function addExercise(pre){
   const bl=document.createElement('div');bl.className='exblock';
   bl.innerHTML=`<div class="exhead">
-   <input type="text" class="exname" list="movedl" placeholder="exercise name">
+   <div class="acwrap"><input type="text" class="exname" placeholder="exercise name" autocomplete="off"><div class="aclist"></div></div>
    <button class="flagbtn ss" title="superset group">SS</button>
    <input type="number" class="ssnum" min="1" placeholder="#" style="width:54px;display:none">
    <button class="flagbtn kg" title="entered in kg → convert to lbs">kg</button>
@@ -395,7 +402,30 @@ function addExercise(pre){
   bl.querySelector('.ss').onclick=()=>{const on=bl.querySelector('.ss').classList.toggle('on');bl.querySelector('.ssnum').style.display=on?'inline-block':'none';};
   bl.querySelector('.kg').onclick=()=>bl.querySelector('.kg').classList.toggle('on');
   bl.querySelector('.single').onclick=()=>bl.querySelector('.single').classList.toggle('on');
-  bl.querySelector('.exname').addEventListener('input',()=>updateLast(bl));
+  (function(){
+    const inp=bl.querySelector('.exname'), list=bl.querySelector('.aclist'); let idx=-1;
+    function render(){
+      const q=inp.value.toLowerCase().trim();
+      const m=(q?SUGGEST.filter(n=>n.toLowerCase().includes(q)):SUGGEST).slice(0,40);
+      if(!m.length){list.classList.remove('show');list.innerHTML='';return;}
+      list.innerHTML=m.map(n=>'<div class="acitem">'+n.replace(/</g,'&lt;')+'</div>').join('');
+      idx=-1; list.classList.add('show');
+      list.querySelectorAll('.acitem').forEach(it=>it.addEventListener('pointerdown',ev=>{ev.preventDefault();inp.value=it.textContent;list.classList.remove('show');updateLast(bl);}));
+    }
+    inp.addEventListener('input',()=>{render();updateLast(bl);});
+    inp.addEventListener('focus',render);
+    inp.addEventListener('blur',()=>setTimeout(()=>list.classList.remove('show'),160));
+    inp.addEventListener('keydown',ev=>{
+      const items=[...list.querySelectorAll('.acitem')];
+      if(ev.key==='ArrowDown'){ev.preventDefault();idx=Math.min(idx+1,items.length-1);}
+      else if(ev.key==='ArrowUp'){ev.preventDefault();idx=Math.max(idx-1,0);}
+      else if(ev.key==='Enter'){if(idx>=0&&items[idx]){ev.preventDefault();inp.value=items[idx].textContent;list.classList.remove('show');updateLast(bl);}return;}
+      else if(ev.key==='Escape'){list.classList.remove('show');return;}
+      else return;
+      items.forEach((it,i)=>it.classList.toggle('active',i===idx));
+      if(items[idx])items[idx].scrollIntoView({block:'nearest'});
+    });
+  })();
   $('#exlist').appendChild(bl);renumber();updateLast(bl);
 }
 $('#addex').onclick=()=>addExercise();
@@ -447,18 +477,23 @@ function editWorkout(id){
 /* ---- HISTORY ---- */
 function renderHistory(){
   const q=$('#histsearch').value.toLowerCase();
-  const list=[...RECORDS].sort((a,b)=>a.d<b.d?1:-1);
-  $('#histlist').innerHTML=list.filter(w=>{
-    if(!q)return true;
-    return w.d.includes(q)||w.ex.some(e=>e.n.toLowerCase().includes(q));
-  }).map(w=>{
-    const sum=w.ex.map(e=>e.n+' ('+e.s.length+')'+(e.no?' 📝':'')).join(', ');
-    const notes=[];if(w.note)notes.push('<b>Workout:</b> '+w.note);w.ex.forEach(e=>{if(e.no)notes.push('<b>'+e.n+':</b> '+e.no);});
-    const noteHtml=notes.length?'<div class="sum" style="margin-top:6px;color:#c9b6e6">'+notes.join('<br>')+'</div>':'';
-    return `<div class="hist"><div class="row" style="justify-content:space-between">
-      <div><div class="d">${fmtD(w.d)}${w.bw?' · '+w.bw+' lbs':''}</div><div class="sum">${sum}</div>${noteHtml}</div>
-      <div class="row"><button class="ghost" data-edit="${w.id}">Edit</button><button class="danger" data-del="${w.id}">Delete</button></div></div></div>`;
-  }).join('')||'<p class="muted">No workouts yet.</p>';
+  const all=[...RECORDS].sort((a,b)=>a.d<b.d?1:-1).filter(w=>!q||w.d.includes(q)||w.ex.some(e=>e.n.toLowerCase().includes(q)));
+  const shown=all.slice(0,60);
+  $('#histlist').innerHTML=(shown.map(w=>{
+    let body='';
+    w.ex.forEach(e=>{
+      const flags=[e.lat==='single'?'single':'',e.grip||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+      body+='<div style="margin-top:9px"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
+        '<div class="setpills">'+e.s.map(([r,wt])=>'<span class="setpill">'+r+' × '+(+wt)+'</span>').join('')+'</div>'+
+        (e.no?'<div class="muted" style="font-size:12px;margin-top:3px">📝 '+e.no+'</div>':'');
+    });
+    if(w.note) body+='<div class="muted" style="font-size:12px;margin-top:8px">📝 Workout: '+w.note+'</div>';
+    return '<div class="hist"><div class="row" style="justify-content:space-between;align-items:center">'+
+      '<div class="d">'+fmtD(w.d)+(w.bw?' · '+w.bw+' lbs':'')+'</div>'+
+      '<div class="row"><button class="ghost" data-edit="'+w.id+'">Edit</button><button class="danger" data-del="'+w.id+'">Delete</button></div></div>'+
+      body+'</div>';
+  }).join('')||'<p class="muted">No workouts found.</p>')+
+   (all.length>60?'<p class="hint">Showing 60 of '+all.length+' — use search to find older ones.</p>':'');
   $('#histlist').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editWorkout(b.dataset.edit));
   $('#histlist').querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{
     if(confirm('Delete this workout?')){RECORDS=RECORDS.filter(r=>r.id!==b.dataset.del);persist();refreshDashboard();renderHistory();toast('Deleted');}
