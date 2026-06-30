@@ -70,11 +70,11 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
  <section id="dash" class="view active">
   <div class="controls">
    <div><small class="lbl">Movement</small><select id="movesel"></select></div>
-   <div><small class="lbl">Variant (specific setup)</small><select id="varsel"></select></div>
    <div><small class="lbl">Metric</small><div class="seg" id="metricseg">
      <button data-m="e1rm" class="active">Est. 1RM</button><button data-m="topw">Top set</button><button data-m="vol">Volume</button></div></div>
    <div><small class="lbl">Trend</small><div class="seg" id="trendseg"><button data-t="1" class="active">On</button><button data-t="0">Off</button></div></div>
   </div>
+  <div class="controls" id="filters" style="margin-top:-4px"></div>
   <div id="cards" class="cards"></div>
   <div class="chartbox"><canvas id="chart"></canvas></div>
   <p class="hint" style="margin-top:8px">Tip: click any point on the graph to see that session's sets.</p>
@@ -158,7 +158,7 @@ const SEED=[], CATRULES=[["crunch", "misc"], ["oblique", "misc"], ["ab push", "m
 "1a chest press": "chest press",
 "1a press": "chest press",
 "2h shoulder press": "shoulder press",
-"front lat raises": "lat raises",
+"front lat raises": "lateral raises",
 "dencline chest press": "chest press",
 "biceps curls short bar": "biceps curl",
 "pulley biceps curl": "biceps curl",
@@ -193,7 +193,7 @@ const SEED=[], CATRULES=[["crunch", "misc"], ["oblique", "misc"], ["ab push", "m
 "sauat shrugs": "shrug",
 "leg press sled": "leg press",
 "chest press plates": "chest press",
-"front lat delt raises": "lat raises",
+"front lat delt raises": "lateral raises",
 "biceps curls weird bar": "biceps curl",
 "rotary calf ( (": "calf raise",
 "bar curls": "biceps curl",
@@ -206,14 +206,14 @@ const SEED=[], CATRULES=[["crunch", "misc"], ["oblique", "misc"], ["ab push", "m
 "side delt low delt raises": "low side delt raises",
 "low rent delt raises": "low delt raises",
 "chest press assist bar": "chest press",
-"leaning lat raises": "lat raises",
+"leaning lat raises": "lateral raises",
 "hammer rows": "hammer curls",
-"leaning side lat raises": "lat raises",
+"leaning side lat raises": "lateral raises",
 "curls bar": "biceps curl",
 "biceps curls - r elbow/forearm": "biceps curl",
 "iso lateral chest press": "chest press",
 "front delt raises ez fixed bar": "fixed front delt raises",
-"horizintal chest flyes": "chest flyes",
+"horizintal chest flyes": "chest fly",
 "ez fixed front delt raises": "fixed front delt raises",
 "upright row bar": "row",
 "high triceps pushdowns bar": "triceps pushdown",
@@ -335,8 +335,40 @@ const SEED=[], CATRULES=[["crunch", "misc"], ["oblique", "misc"], ["ab push", "m
 "lat pulldowns close": "lat pulldown",
 "front raises": "front delt raise",
 "triceps pushdowns bar": "triceps pushdown",
-"triceps pressdowns": "triceps press"
-};
+"triceps pressdowns": "triceps press",
+"ohp": "shoulder press",
+"trap shrugs squat": "squat shrug",
+"shrugs squat": "squat shrug",
+"squat shrugs sideways": "squat shrug",
+"trap shrugs": "shrug",
+"sldl+ shrugs": "shrug",
+"sldl + shrugs": "shrug",
+"rows t bar": "row",
+"rows t": "row",
+"rows we z curl bar": "row",
+"orizontal rows": "row",
+"rows long bar": "row",
+"rows narrow": "row",
+"rows cross body": "row",
+"rows hammer": "row",
+"delt rows ez curl bar": "row",
+"race pulls high angle": "face pull",
+"face pulls trap focused": "face pull",
+"fly": "chest fly",
+"flyes": "chest fly",
+"delt front delt": "front delt raise",
+"straight arm front delt raises 1/2": "front delt raise",
+"squatting bad girl": "hip abduction",
+"bad girl squatting": "hip abduction",
+"ab": "ab crunch",
+"curls": "biceps curl",
+"lat raises": "lateral raises",
+"chest flyes": "chest fly"
+}, BASE_DIR={"front delt raise":"front","fixed front delt raises":"front","front shoulder raises":"front",
+"side delt raise":"side","low side delt raises":"side","lateral raises":"side","side lat raise":"side",
+"side delt low raises":"side","side delts":"side","low delt raises":"side",
+"rear delt flyes":"rear","rear delt fly":"rear","y raises":"rear","delt raise":""}
+;
 let NAMEMAP={};
 let SUGGEST=[];
 const $=s=>document.querySelector(s);
@@ -370,9 +402,20 @@ function extractAtt(name){
   return {name:n||name, att};
 }
 const EQ_TESTS=[[/\bplate[- ]?loaded\b|\bplates\b|\bplate\b/ig,'plate-loaded'],[/\b(dumbbells?|db)\b/ig,'dumbbell'],[/\b(barbells?|bb)\b/ig,'barbell'],[/\bsmith\b/ig,'smith'],[/\bcable\b/ig,'cable'],[/\b(machines?|nitro)\b/ig,'machine']];
-const ANG_TESTS=[[/\bincline\b/ig,'incline'],[/\bdecline\b/ig,'decline'],[/\bflat\b/ig,'flat'],[/\bhorizontal\b/ig,'horizontal']];
+const ANG_TESTS=[[/\bincline\b/ig,'incline'],[/\bde[nc]+line\b/ig,'decline'],[/\bflat\b/ig,'flat'],[/\bhorizontal\b/ig,'horizontal']];
 function extractEq(name){let eq='',n=' '+name+' ';for(const[re,v]of EQ_TESTS){if(re.test(n)){if(eq==='')eq=v;n=n.replace(re,' ');}}return {name:n.replace(/\s+/g,' ').trim()||name, eq};}
 function extractAng(name){let ang='',n=' '+name+' ';for(const[re,v]of ANG_TESTS){if(re.test(n)){if(ang==='')ang=v;n=n.replace(re,' ');}}return {name:n.replace(/\s+/g,' ').trim()||name, ang};}
+function extractDir(name){
+  let dir='', n=' '+name+' ';
+  if(/\b(delt|delts|raise|raises|flye?s?|lateral)\b/i.test(n)){
+    if(/\brear\b/i.test(n)){dir='rear';n=n.replace(/\brear\b/ig,' ');}
+    else if(/\bfront\b/i.test(n)){dir='front';n=n.replace(/\bfront\b/ig,' ');}
+    else if(/\b(side|lateral)\b/i.test(n)){dir='side';n=n.replace(/\b(side|lateral)\b/ig,' ');}
+    n=n.replace(/\s+/g,' ').trim();
+    if(/^(delt\s*(raises?|flyes?|fly)?|raises?|shoulder raises?|delts?)$/i.test(n)||n==='') n='delt raise';
+  }
+  return {name:n||name, dir};
+}
 function migrateGrip(){
   let changed=0;
   for(const w of RECORDS) for(const e of w.ex){
@@ -382,6 +425,12 @@ function migrateGrip(){
     if(e.eq===undefined||e.eq===''){ const q=extractEq(e.n); if(q.eq||q.name!==e.n){ if(q.eq)e.eq=q.eq; e.n=q.name; ch=true; } }
     if(e.ang===undefined||e.ang===''){ const an=extractAng(e.n); if(an.ang||an.name!==e.n){ if(an.ang)e.ang=an.ang; e.n=an.name; ch=true; } }
     if(BASE_ALIAS[e.b]){ e.b=BASE_ALIAS[e.b]; ch=true; }
+    if(BASE_DIR[e.b]!==undefined){
+      if(e.dir===undefined){ e.dir=BASE_DIR[e.b]; ch=true; }
+      if(!e.lat && /\b(single|1a|1h|one arm)\b/i.test(e.n)){ e.lat='single'; ch=true; }
+      if(e.n!=='delt raise'){ e.n='delt raise'; ch=true; }
+      if(e.b!=='delt raise'){ e.b='delt raise'; ch=true; }
+    }
     if(ch)changed++;
   }
   if(changed){persist();}
@@ -407,10 +456,10 @@ function buildSessions(){
   for(const w of RECORDS){for(const e of w.ex){
     let vol=0,topw=0,best=0,bs=[0,0];
     for(const[r,wt]of e.s){vol+=r*wt;if(wt>topw)topw=wt;const x=e1rm(r,wt);if(x>best){best=x;bs=[r,wt];}}
-    const mods=[e.eq,e.ang,e.grip,e.att,e.lat==='single'?'1-arm':''].filter(Boolean);
+    const mods=[e.eq,e.ang,e.dir,e.grip,e.att,e.lat==='single'?'1-arm':''].filter(Boolean);
     const vlabel=e.n+(mods.length?' · '+mods.join(' · '):'');
-    const vk=[e.n,e.eq||'',e.ang||'',e.grip||'',e.att||'',e.lat||''].join('|');
-    out.push({d:w.d,n:e.n,vk,vlabel,b:e.b,c:e.c,m:e.m,e1rm:Math.round(best*10)/10,topw,vol:Math.round(vol),ts:bs[0]+'x'+(+bs[1])});
+    const vk=[e.n,e.eq||'',e.ang||'',e.dir||'',e.grip||'',e.att||'',e.lat||''].join('|');
+    out.push({d:w.d,n:e.n,vk,vlabel,b:e.b,c:e.c,m:e.m,eq:e.eq||'',ang:e.ang||'',dir:e.dir||'',grip:e.grip||'',att:e.att||'',lat:e.lat||'',e1rm:Math.round(best*10)/10,topw,vol:Math.round(vol),ts:bs[0]+'x'+(+bs[1])});
   }}
   return out;
 }
@@ -433,40 +482,56 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
 
 /* ---- DASHBOARD ---- */
 let metric='e1rm',showTrend=true,chart;
-const movesel=$('#movesel'),varsel=$('#varsel');
+const movesel=$('#movesel'), filtersEl=$('#filters');
 function refreshMovements(){
   const list=movementList();const cur=movesel.value;
   movesel.innerHTML=list.map(m=>`<option value="${m.name.replace(/"/g,'&quot;')}">${m.name} (${m.sessions})</option>`).join('');
   if(cur&&list.some(m=>m.name===cur))movesel.value=cur;
   // refresh autocomplete datalist (all known names + bases)
-  const clean=n=>n.replace(/^[^a-z0-9]+/i,'').replace(/\b([12][abhl])\b\s*[-:]?\s*/gi,'').replace(/\b(single (arm|leg|side)s?|one arm|two arm)\b/gi,'').replace(/\b(hammer grip|hammer|hg|uh grip|underhand|uh|supinated|reverse grip|reverse|overhand|oh grip|oh|pronated)\b/gi,'').replace(/\bclose claw\b|\bfunky bar\b|\bez(?:\s+curl)?\s+bar\b|\bstraight bar\b|\bv (?:grip|bar)\b|\brope\b|\bwide grip\b|\bclose grip\b|\bnarrow grip\b/gi,'').replace(/\b(machines?|cable|dumbbells?|db|barbells?|bb|smith|plate[- ]?loaded|plates?|plate|nitro|incline|decline|flat|horizontal)\b/gi,'').replace(/\s+/g,' ').trim();
-  const seen={},out=[];
-  const add=n=>{const c=clean(n),k=c.toLowerCase();if(c&&!seen[k]){seen[k]=1;out.push(c);}};
-  SESS.forEach(s=>add(s.n));Object.keys(NAMEMAP).forEach(add);   // SESS first keeps original casing
-  out.sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:1);
-  SUGGEST=out;
+  // suggest only base movements (modifiers are picked via the dropdowns)
+  SUGGEST=list.map(m=>m.name).sort((a,b)=>a<b?-1:1);
 }
-function fillVariants(){
-  const base=movesel.value,m={};
-  SESS.forEach(s=>{if(s.b===base){if(!m[s.vk])m[s.vk]={label:s.vlabel,c:0};m[s.vk].c++;}});
-  const list=Object.entries(m).sort((a,b)=>b[1].c-a[1].c);
-  varsel.innerHTML='<option value="__all__">All variants combined ('+list.length+')</option>'+
-    list.map(([vk,o])=>`<option value="${vk.replace(/"/g,'&quot;')}">${o.label} (${o.c})</option>`).join('');
+const DIMS=[['eq','Equipment'],['ang','Angle'],['dir','Direction'],['grip','Grip'],['att','Attachment'],['lat','Limb']];
+let filterState={};
+function dimLabel(k,v){ return k==='lat'?(v==='single'?'1-arm':v):v; }
+function buildFilters(){
+  const base=movesel.value, rows=SESS.filter(s=>s.b===base);
+  filterState={}; let html='';
+  DIMS.forEach(([k,label])=>{
+    const vals=[...new Set(rows.map(s=>s[k]||''))], nonEmpty=vals.filter(Boolean).sort();
+    if(!nonEmpty.length) return;
+    let o='<option value="__any__">'+label+': any</option>';
+    nonEmpty.forEach(v=>o+='<option value="'+v+'">'+dimLabel(k,v)+'</option>');
+    if(vals.includes('')) o+='<option value="__none__">'+label+': (none)</option>';
+    html+='<div><select class="filt" data-k="'+k+'">'+o+'</select></div>';
+    filterState[k]='__any__';
+  });
+  filtersEl.innerHTML=html||'<span class="muted" style="font-size:13px;align-self:center">No sub-options for this movement.</span>';
+  filtersEl.querySelectorAll('.filt').forEach(sel=>sel.onchange=()=>{filterState[sel.dataset.k]=sel.value;draw();});
+}
+function activeFilterLabel(){
+  const a=[];for(const k in filterState){const v=filterState[k];if(v!=='__any__')a.push(v==='__none__'?'(no '+k+')':dimLabel(k,v));}
+  return a.length?' · '+a.join(' · '):'';
+}
+function passes(o){
+  for(const k in filterState){ const v=filterState[k]; if(v==='__any__')continue;
+    if(v==='__none__'){ if(o[k]) return false; } else if((o[k]||'')!==v) return false; }
+  return true;
 }
 const METLABEL={e1rm:'Estimated 1RM (lbs)',topw:'Top-set weight (lbs)',vol:'Session volume (lbs)'};
 function lin(p){const n=p.length;if(n<2)return null;let sx=0,sy=0,sxy=0,sxx=0;p.forEach(q=>{sx+=q.x;sy+=q.y;sxy+=q.x*q.y;sxx+=q.x*q.x;});const s=(n*sxy-sx*sy)/(n*sxx-sx*sx||1);return{slope:s,int:(sy-s*sx)/n};}
 
 function matchingFor(){
-  const base=movesel.value,variant=varsel.value,out=[];
+  const base=movesel.value,out=[];
   for(const w of RECORDS){
-    const exs=w.ex.filter(e=> variant==='__all__'? e.b===base : e.n===variant);
+    const exs=w.ex.filter(e=>e.b===base&&passes(e));
     if(exs.length) out.push({d:w.d,bw:w.bw,note:w.note,exs});
   }
   return out;
 }
 let curIso=null, fullDay=false;
 function exRowHtml(e,dim){
-  const flags=[e.eq||'',e.ang||'',e.lat==='single'?'single':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+  const flags=[e.eq||'',e.ang||'',e.dir||'',e.lat==='single'?'single':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
   let vol=0,best=0;e.s.forEach(([r,w])=>{vol+=r*w;const x=w*(1+r/30);if(x>best)best=x;});
   return '<div style="margin-top:10px'+(dim?';opacity:.6':'')+'"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
     '<div class="setpills">'+e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>'+
@@ -475,10 +540,10 @@ function exRowHtml(e,dim){
 function renderSession(iso){
   if(iso)curIso=iso; iso=curIso;
   if(!iso){$('#sessiondetail').innerHTML='<div class="k">Session</div><div class="muted">Click a point above.</div>';return;}
-  const base=movesel.value,variant=varsel.value;
+  const base=movesel.value;
   const day=RECORDS.filter(w=>w.d===iso);
   if(!day.length){$('#sessiondetail').innerHTML='<div class="k">Session</div><div class="muted">No data.</div>';return;}
-  const isSel=e=> variant==='__all__'? e.b===base : e.n===variant;
+  const isSel=e=> e.b===base && passes(e);
   const toggle='<button class="flagbtn'+(fullDay?' on':'')+'" id="fulldaybtn" style="float:right;margin-top:-2px">'+(fullDay?'Full day ✓':'Full day')+'</button>';
   let html='<div class="k">Session — '+fmtD(iso)+toggle+'</div>';
   day.forEach(w=>{
@@ -493,14 +558,14 @@ function renderSession(iso){
   const btn=$('#fulldaybtn'); if(btn) btn.onclick=()=>{fullDay=!fullDay;renderSession();};
 }
 function renderStats(){
-  const base=movesel.value,variant=varsel.value,items=matchingFor();
+  const base=movesel.value,items=matchingFor();
   if(!items.length){$('#statsblock').innerHTML='';return;}
   let sets=0,reps=0,vol=0,bestE=0,bestD='',bestSet='',topW=0,topD='';const days=[];
   items.forEach(it=>{days.push(it.d);it.exs.forEach(e=>e.s.forEach(([r,w])=>{sets++;reps+=r;vol+=r*w;const x=w*(1+r/30);if(x>bestE){bestE=x;bestD=it.d;bestSet=r+' × '+(+w);}if(w>topW){topW=w;topD=it.d;}}));});
   const uniq=[...new Set(days)].sort();const first=uniq[0],last=uniq[uniq.length-1];
   const span=Math.round((new Date(last)-new Date(first))/864e5);
   const freq=uniq.length>1?(span/(uniq.length-1)).toFixed(1):'—';
-  $('#statsblock').innerHTML='<div class="k">All-time stats — '+base+(variant!=='__all__'?' · '+variant:'')+'</div>'+
+  $('#statsblock').innerHTML='<div class="k">All-time stats — '+base+activeFilterLabel()+'</div>'+
    '<div class="statgrid">'+
    '<div><span class="muted">Sessions</span><br><b>'+uniq.length+'</b></div>'+
    '<div><span class="muted">Date range</span><br><b>'+fmtD(first)+' – '+fmtD(last)+'</b></div>'+
@@ -514,8 +579,8 @@ function renderStats(){
 }
 
 function draw(){
-  const base=movesel.value,variant=varsel.value;
-  let raw=(variant==='__all__')?SESS.filter(s=>s.b===base):SESS.filter(s=>s.vk===variant);
+  const base=movesel.value;
+  let raw=SESS.filter(s=>s.b===base&&passes(s));
   if(!raw.length){if(chart){chart.destroy();chart=null;}$('#cards').innerHTML='<div class="card"><div class="k">No data</div></div>';return;}
   const byDate={};raw.forEach(s=>{const g=byDate[s.d]||(byDate[s.d]={d:s.d,c:s.c,m:s.m,vol:0,e1rm:0,topw:0,ts:''});g.vol+=s.vol;if(s.e1rm>g.e1rm){g.e1rm=s.e1rm;g.ts=s.ts;}if(s.topw>g.topw)g.topw=s.topw;});
   const rows=Object.values(byDate).sort((a,b)=>a.d<b.d?-1:1);
@@ -539,15 +604,15 @@ function draw(){
    <div class="card"><div class="k">Change</div><div class="v" style="color:${pct>=0?'var(--good)':'var(--push)'}">${pct>=0?'+':''}${pct}%</div><div class="s">${rows.length} sessions</div></div>
    <div class="card"><div class="k">Trend</div><div class="v" style="color:${perMonth>=0?'var(--good)':'var(--push)'}">${perMonth>=0?'+':''}${perMonth.toFixed(1)}</div><div class="s">per month</div></div>`;
   renderStats();renderSession(rows[rows.length-1].d);
-  $('#dashhint').textContent=(variant==='__all__'&&metric!=='vol')
-    ?'Showing ALL variants combined — different machines have different weight scales, so this trend mixes them. Pick a Variant for a clean strength trend.'
+  $('#dashhint').textContent=(!Object.values(filterState).some(v=>v!=='__any__')&&metric!=='vol')
+    ?'No filters set — this combines all setups of this movement (different machines/angles have different weight scales). Use the filter buttons above for a clean trend.'
     :metric==='e1rm'?'Est. 1RM = Epley (weight×(1+reps/30)) on your best set each session. Dashed line is a least-squares trend projected 120 days out.'
     :metric==='topw'?'Top-set = heaviest weight that session.':'Volume = total reps×weight that session.';
 }
 $('#metricseg').onclick=e=>{if(e.target.dataset.m){[...e.target.parentNode.children].forEach(b=>b.classList.remove('active'));e.target.classList.add('active');metric=e.target.dataset.m;draw();}};
 $('#trendseg').onclick=e=>{if(e.target.dataset.t){[...e.target.parentNode.children].forEach(b=>b.classList.remove('active'));e.target.classList.add('active');showTrend=e.target.dataset.t==='1';draw();}};
-movesel.onchange=()=>{fillVariants();draw();};varsel.onchange=draw;
-function refreshDashboard(){SESS=buildSessions();refreshMovements();fillVariants();draw();}
+movesel.onchange=()=>{buildFilters();draw();};
+function refreshDashboard(){SESS=buildSessions();refreshMovements();buildFilters();draw();}
 
 /* ---- LOGGER ---- */
 let editId=null;
@@ -609,12 +674,13 @@ function addExercise(pre){
    <select class="att" title="attachment"><option value="">Attach: none</option><option value="rope">Rope</option><option value="v-grip">V-grip</option><option value="wide">Wide</option><option value="close">Close</option><option value="ez-bar">EZ bar</option><option value="straight-bar">Straight bar</option><option value="funky-bar">Funky bar</option><option value="close-claw">Close claw</option><option value="narrow">Narrow</option></select>
    <select class="eq" title="equipment"><option value="">Equip: none</option><option value="machine">Machine</option><option value="cable">Cable</option><option value="dumbbell">Dumbbell</option><option value="barbell">Barbell</option><option value="smith">Smith</option><option value="plate-loaded">Plate-loaded</option></select>
    <select class="ang" title="angle"><option value="">Angle: none</option><option value="incline">Incline</option><option value="decline">Decline</option><option value="flat">Flat</option><option value="horizontal">Horizontal</option></select>
+   <select class="dir" title="direction (e.g. delts)"><option value="">Dir: none</option><option value="front">Front</option><option value="side">Side</option><option value="rear">Rear</option></select>
    <button class="rm" title="remove exercise">🗑</button></div>
    <div class="lastinfo"></div>
    <div class="sets"></div><button class="ghost addset" style="font-size:13px;padding:6px 10px">+ set</button>
    <input type="text" class="exnote" placeholder="note (optional) — e.g. left shoulder sore" style="width:100%;margin-top:8px">`;
   const sets=bl.querySelector('.sets');
-  if(pre){bl.querySelector('.exname').value=pre.n;if(pre.no)bl.querySelector('.exnote').value=pre.no;if(pre.ss){bl.querySelector('.ss').classList.add('on');bl.querySelector('.ssnum').style.display='inline-block';bl.querySelector('.ssnum').value=pre.ss.replace('SS','');}if(pre.lat==='single')bl.querySelector('.single').classList.add('on');if(pre.grip)bl.querySelector('.grip').value=pre.grip;if(pre.att)bl.querySelector('.att').value=pre.att;if(pre.eq)bl.querySelector('.eq').value=pre.eq;if(pre.ang)bl.querySelector('.ang').value=pre.ang;pre.s.forEach(([r,w])=>sets.appendChild(setRow(r,w)));}
+  if(pre){bl.querySelector('.exname').value=pre.n;if(pre.no)bl.querySelector('.exnote').value=pre.no;if(pre.ss){bl.querySelector('.ss').classList.add('on');bl.querySelector('.ssnum').style.display='inline-block';bl.querySelector('.ssnum').value=pre.ss.replace('SS','');}if(pre.lat==='single')bl.querySelector('.single').classList.add('on');if(pre.grip)bl.querySelector('.grip').value=pre.grip;if(pre.att)bl.querySelector('.att').value=pre.att;if(pre.eq)bl.querySelector('.eq').value=pre.eq;if(pre.ang)bl.querySelector('.ang').value=pre.ang;if(pre.dir)bl.querySelector('.dir').value=pre.dir;pre.s.forEach(([r,w])=>sets.appendChild(setRow(r,w)));}
   else{sets.appendChild(setRow());sets.appendChild(setRow());}
   bl.querySelector('.addset').onclick=()=>{sets.appendChild(setRow());renumber();};
   bl.querySelector('.rm').onclick=()=>bl.remove();
@@ -662,6 +728,7 @@ function gatherWorkout(){
     const attSel=bl.querySelector('.att').value;
     const eqSel=bl.querySelector('.eq').value;
     const angSel=bl.querySelector('.ang').value;
+    const dirSel=bl.querySelector('.dir').value;
     const sets=[];
     bl.querySelectorAll('.setrow').forEach(sr=>{
       const r=sr.querySelector('.reps').value.trim(),w=sr.querySelector('.wt').value.trim();
@@ -669,12 +736,12 @@ function gatherWorkout(){
       sets.push([parseInt(r||0),wt]);
     });
     if(!sets.length)return;
-    const gx=extractGrip(name); const ax=extractAtt(gx.name); const qx=extractEq(ax.name); const nx=extractAng(qx.name); const cleanName=nx.name;
-    const grip=gripSel||gx.grip||''; const att=attSel||ax.att||''; const eq=eqSel||qx.eq||''; const ang=angSel||nx.ang||'';
+    const gx=extractGrip(name); const ax=extractAtt(gx.name); const qx=extractEq(ax.name); const nx=extractAng(qx.name); const dx=extractDir(nx.name); const cleanName=dx.name;
+    const grip=gripSel||gx.grip||''; const att=attSel||ax.att||''; const eq=eqSel||qx.eq||''; const ang=angSel||nx.ang||''; const dir=dirSel||dx.dir||'';
     const tg=tagExercise(cleanName);
     let mod=tg.m; if(eq==='dumbbell'||eq==='barbell')mod='free-weight'; else if(['machine','cable','smith','plate-loaded'].includes(eq))mod='machine';
     const note=bl.querySelector('.exnote').value.trim();
-    ex.push({n:cleanName,b:tg.b,c:tg.c,m:mod,ss:ssOn?('SS'+ssNum):'',u:kgOn?'kg':'lb',lat:singleOn?'single':'',grip:grip,att:att,eq:eq,ang:ang,s:sets,no:note});
+    ex.push({n:cleanName,b:tg.b,c:tg.c,m:mod,ss:ssOn?('SS'+ssNum):'',u:kgOn?'kg':'lb',lat:singleOn?'single':'',grip:grip,att:att,eq:eq,ang:ang,dir:dir,s:sets,no:note});
   });
   if(!ex.length)return null;
   const wnote=$('#wnote').value.trim();
@@ -706,7 +773,7 @@ function renderHistory(){
   $('#histlist').innerHTML=(shown.map(w=>{
     let body='';
     w.ex.forEach(e=>{
-      const flags=[e.eq||'',e.ang||'',e.lat==='single'?'single':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+      const flags=[e.eq||'',e.ang||'',e.dir||'',e.lat==='single'?'single':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
       body+='<div style="margin-top:9px"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
         '<div class="setpills">'+e.s.map(([r,wt])=>'<span class="setpill">'+r+' × '+(+wt)+'</span>').join('')+'</div>'+
         (e.no?'<div class="muted" style="font-size:12px;margin-top:3px">📝 '+e.no+'</div>':'');
@@ -735,7 +802,7 @@ $('#expjson').onclick=()=>{dl('lftng_backup_'+new Date().toISOString().slice(0,1
 $('#impjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d))throw 0;RECORDS=d;migrateGrip();persist();refreshDashboard();toast('Imported '+d.length+' workouts');renderData();}catch(err){toast('Invalid backup file');}};rd.readAsText(f);};
 function sig(w){return w.d+'|'+w.ex.map(e=>e.n.toLowerCase()+':'+e.s.map(s=>s.join('x')).join(',')).join('|');}
 $('#mergejson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const inc=JSON.parse(rd.result);if(!Array.isArray(inc))throw 0;const have=new Set(RECORDS.map(sig));let added=0;inc.forEach(w=>{const s=sig(w);if(!have.has(s)){w.id=w.id||('m'+Date.now()+Math.random().toString(36).slice(2,6));RECORDS.push(w);have.add(s);added++;}});migrateGrip();RECORDS.sort((a,b)=>a.d<b.d?-1:1);persist();refreshDashboard();toast('Merged '+added+' new workout'+(added===1?'':'s'));autoPush();renderData();}catch(err){toast('Invalid merge file');}};rd.readAsText(f);};
-function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',single:e.lat==='single'?'yes':'',grip:e.grip||'regular',attachment:e.att||'',equipment:e.eq||'',angle:e.ang||'',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10,exercise_note:e.no||'',workout_note:w.note||''}))));return rows;}
+function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',single:e.lat==='single'?'yes':'',grip:e.grip||'regular',attachment:e.att||'',equipment:e.eq||'',angle:e.ang||'',direction:e.dir||'',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10,exercise_note:e.no||'',workout_note:w.note||''}))));return rows;}
 function summaryRows(){
   const ss=buildSessions(),by={};
   ss.forEach(s=>{const g=by[s.b]||(by[s.b]={base_exercise:s.b,category:s.c,modality:s.m,sessions:new Set(),sets:0,best_e1rm:0,best_date:'',top_weight:0,latest_e1rm:0,latest_date:''});
