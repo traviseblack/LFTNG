@@ -500,9 +500,9 @@ function buildFilters(){
   DIMS.forEach(([k,label])=>{
     const vals=[...new Set(rows.map(s=>s[k]||''))], nonEmpty=vals.filter(Boolean).sort();
     if(!nonEmpty.length) return;
-    let o='<option value="__any__">'+label+': any</option>';
+    let o='<option value="__any__">'+label+'</option>';
     nonEmpty.forEach(v=>o+='<option value="'+v+'">'+dimLabel(k,v)+'</option>');
-    if(vals.includes('')) o+='<option value="__none__">'+label+': (none)</option>';
+    if(vals.includes('')) o+='<option value="__none__">(none)</option>';
     html+='<div><select class="filt" data-k="'+k+'">'+o+'</select></div>';
     filterState[k]='__any__';
   });
@@ -670,11 +670,11 @@ function addExercise(pre){
    <input type="number" class="ssnum" min="1" placeholder="#" style="width:54px;display:none">
    <button class="flagbtn kg" title="entered in kg → convert to lbs">kg</button>
    <button class="flagbtn single" title="single-limb (one arm / one leg)">Single</button>
-   <select class="grip" title="grip"><option value="">Grip: regular</option><option value="hammer">Hammer</option><option value="underhand">Underhand</option><option value="reverse">Reverse</option></select>
-   <select class="att" title="attachment"><option value="">Attach: none</option><option value="rope">Rope</option><option value="v-grip">V-grip</option><option value="wide">Wide</option><option value="close">Close</option><option value="ez-bar">EZ bar</option><option value="straight-bar">Straight bar</option><option value="funky-bar">Funky bar</option><option value="close-claw">Close claw</option><option value="narrow">Narrow</option></select>
-   <select class="eq" title="equipment"><option value="">Equip: none</option><option value="machine">Machine</option><option value="cable">Cable</option><option value="dumbbell">Dumbbell</option><option value="barbell">Barbell</option><option value="smith">Smith</option><option value="plate-loaded">Plate-loaded</option></select>
-   <select class="ang" title="angle"><option value="">Angle: none</option><option value="incline">Incline</option><option value="decline">Decline</option><option value="flat">Flat</option><option value="horizontal">Horizontal</option></select>
-   <select class="dir" title="direction (e.g. delts)"><option value="">Dir: none</option><option value="front">Front</option><option value="side">Side</option><option value="rear">Rear</option></select>
+   <select class="grip" title="grip"><option value="">Grip</option><option value="hammer">Hammer</option><option value="underhand">Underhand</option><option value="reverse">Reverse</option></select>
+   <select class="att" title="attachment"><option value="">Attachment</option><option value="rope">Rope</option><option value="v-grip">V-grip</option><option value="wide">Wide</option><option value="close">Close</option><option value="ez-bar">EZ bar</option><option value="straight-bar">Straight bar</option><option value="funky-bar">Funky bar</option><option value="close-claw">Close claw</option><option value="narrow">Narrow</option></select>
+   <select class="eq" title="equipment"><option value="">Equipment</option><option value="machine">Machine</option><option value="cable">Cable</option><option value="dumbbell">Dumbbell</option><option value="barbell">Barbell</option><option value="smith">Smith</option><option value="plate-loaded">Plate-loaded</option></select>
+   <select class="ang" title="angle"><option value="">Angle</option><option value="incline">Incline</option><option value="decline">Decline</option><option value="flat">Flat</option><option value="horizontal">Horizontal</option></select>
+   <select class="dir" title="direction (e.g. delts)"><option value="">Direction</option><option value="front">Front</option><option value="side">Side</option><option value="rear">Rear</option></select>
    <button class="rm" title="remove exercise">🗑</button></div>
    <div class="lastinfo"></div>
    <div class="sets"></div><button class="ghost addset" style="font-size:13px;padding:6px 10px">+ set</button>
