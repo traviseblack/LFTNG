@@ -42,6 +42,7 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
 .hist{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px}
 .hist .d{font-weight:700}.hist .sum{color:var(--muted);font-size:13px;margin-top:2px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:14px}
+.lastinfo{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:8px 11px;margin-bottom:9px;font-size:13px;display:none}
 .setpills{display:flex;flex-wrap:wrap;gap:6px;margin-top:5px}
 .setpill{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-weight:600;font-size:13px}
 .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px}
@@ -274,6 +275,7 @@ function draw(){
   if(showTrend&&reg)ds.push({label:'Trend + projection',data:trendData,showLine:true,borderColor:'#ffb454',borderDash:[6,5],pointRadius:0,borderWidth:2});
   if(chart)chart.destroy();
   chart=new Chart($('#chart'),{type:'scatter',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,
+    onClick:(e)=>{if(!chart||!chart.scales||!chart.scales.x)return;const xv=chart.scales.x.getValueForPixel(e.x);let best=null,bd=Infinity;pts.forEach(p=>{const d=Math.abs(p.x-xv);if(d<bd){bd=d;best=p;}});if(best&&best.iso)renderSession(best.iso);},
    plugins:{legend:{labels:{color:'#9aa4b2'}},tooltip:{callbacks:{title:c=>c[0].raw.iso?fmtD(c[0].raw.iso):'projected',label:c=>c.raw.ts?`${Math.round(c.parsed.y)} lbs (best set ${c.raw.ts})`:`${Math.round(c.parsed.y)} lbs`}}},
    scales:{x:{type:'linear',ticks:{color:'#9aa4b2',callback:v=>{const dt=new Date(t0+v*864e5);return (dt.getMonth()+1)+'/'+(dt.getFullYear()+'').slice(2);}},grid:{color:'#222732'}},y:{ticks:{color:'#9aa4b2'},grid:{color:'#222732'}}}}});
   const cat=rows[0].c,mod=rows[0].m,vals=pts.map(p=>p.y),first=vals[0],last=vals[vals.length-1],pr=Math.max(...vals),prRow=rows[vals.indexOf(pr)],pct=first?Math.round((last-first)/first*100):0,perMonth=reg?reg.slope*30:0;
@@ -303,6 +305,34 @@ function setRow(reps='',wt=''){
   div.querySelector('.rm').onclick=()=>{div.remove();renumber();};return div;
 }
 function renumber(){document.querySelectorAll('.exblock').forEach(bl=>bl.querySelectorAll('.setrow .idx').forEach((s,i)=>s.textContent=i+1));}
+
+function exHistory(name){
+  const key=name.toLowerCase().trim(); if(!key) return {list:[],exact:false};
+  const tg=tagExercise(name); const exact=[],base=[];
+  for(const w of RECORDS){ if(w.id===editId) continue;
+    for(const e of w.ex){
+      if(e.n.toLowerCase()===key) exact.push({d:w.d,e});
+      else if(e.b===tg.b) base.push({d:w.d,e});
+    }
+  }
+  const list=(exact.length?exact:base).sort((a,b)=>a.d<b.d?1:-1);
+  return {list, exact:exact.length>0};
+}
+function updateLast(bl){
+  const name=bl.querySelector('.exname').value.trim();
+  const el=bl.querySelector('.lastinfo');
+  if(!name){el.style.display='none';el.innerHTML='';return;}
+  const {list,exact}=exHistory(name);
+  if(!list.length){el.style.display='block';el.innerHTML='<span class="muted">No previous data for this exercise yet.</span>';return;}
+  const top=list[0];
+  const days=Math.max(0,Math.round((Date.now()-new Date(top.d).getTime())/864e5));
+  let best=0;top.e.s.forEach(([r,w])=>{const x=w*(1+r/30);if(x>best)best=x;});
+  el.style.display='block';
+  el.innerHTML='<b>Last time</b> · '+days+'d ago ('+fmtD(top.d)+')'+(exact?'':' <span class="muted">[as “'+top.e.n+'”]</span>')+
+    '<div class="setpills">'+top.e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>'+
+    '<span class="muted" style="font-size:12px">est 1RM '+Math.round(best)+' · done '+list.length+'×'+(top.e.no?' · 📝 '+top.e.no:'')+'</span>';
+}
+
 function addExercise(pre){
   const bl=document.createElement('div');bl.className='exblock';
   bl.innerHTML=`<div class="exhead">
@@ -312,6 +342,7 @@ function addExercise(pre){
    <button class="flagbtn kg" title="entered in kg → convert to lbs">kg</button>
    <button class="flagbtn single" title="single-limb (one arm / one leg)">Single</button>
    <button class="rm" title="remove exercise">🗑</button></div>
+   <div class="lastinfo"></div>
    <div class="sets"></div><button class="ghost addset" style="font-size:13px;padding:6px 10px">+ set</button>
    <input type="text" class="exnote" placeholder="note (optional) — e.g. left shoulder sore" style="width:100%;margin-top:8px">`;
   const sets=bl.querySelector('.sets');
@@ -322,7 +353,8 @@ function addExercise(pre){
   bl.querySelector('.ss').onclick=()=>{const on=bl.querySelector('.ss').classList.toggle('on');bl.querySelector('.ssnum').style.display=on?'inline-block':'none';};
   bl.querySelector('.kg').onclick=()=>bl.querySelector('.kg').classList.toggle('on');
   bl.querySelector('.single').onclick=()=>bl.querySelector('.single').classList.toggle('on');
-  $('#exlist').appendChild(bl);renumber();
+  bl.querySelector('.exname').addEventListener('input',()=>updateLast(bl));
+  $('#exlist').appendChild(bl);renumber();updateLast(bl);
 }
 $('#addex').onclick=()=>addExercise();
 function resetLogger(){$('#exlist').innerHTML='';editId=null;$('#editbanner').style.display='none';$('#cancel').style.display='none';$('#save').textContent='Save workout';$('#wdate').value=new Date().toISOString().slice(0,10);$('#wbw').value='';$('#wnote').value='';addExercise();}
