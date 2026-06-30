@@ -50,6 +50,7 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
 <div class="tab active" data-v="dash">Dashboard</div>
 <div class="tab" data-v="log">Log workout</div>
 <div class="tab" data-v="hist">History</div>
+<div class="tab" data-v="sync">Sync</div>
 <div class="tab" data-v="data">Backup / Excel</div>
 </div></header>
 <div class="wrap">
@@ -71,6 +72,7 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
    <div><small class="lbl">Date</small><input type="date" id="wdate"></div>
    <div><small class="lbl">Bodyweight (lbs, optional)</small><input type="number" id="wbw" placeholder="e.g. 160" style="width:120px"></div>
   </div>
+  <div style="margin-bottom:14px"><small class="lbl">Workout notes (optional)</small><textarea id="wnote" placeholder="e.g. left early, gym crowded…" style="width:100%;min-height:46px"></textarea></div>
   <div id="exlist"></div>
   <div class="row" style="margin:6px 0 16px">
    <button class="ghost" id="addex">+ Add exercise</button>
@@ -81,6 +83,23 @@ button.ghost{background:var(--panel)}button.danger{background:#3a1d22;color:#ff8
  <section id="hist" class="view">
   <div class="row" style="margin-bottom:12px"><input id="histsearch" placeholder="filter by date or exercise…" style="flex:1"></div>
   <div id="histlist"></div>
+ </section>
+ <section id="sync" class="view">
+  <div class="banner" id="syncstatus"></div>
+  <h3>Cross-device sync (private GitHub Gist)</h3>
+  <p class="hint">Sync your data across devices using your own private GitHub Gist. Set this up once per device: paste a token, then Pull (to load) or Push (to upload). After setup, every saved workout auto-uploads.</p>
+  <div class="row" style="margin-bottom:10px">
+   <input type="password" id="ghtoken" placeholder="GitHub token (ghp_…)" style="flex:1;min-width:220px">
+   <button class="ghost" id="savetoken">Save token</button>
+  </div>
+  <div class="databtns">
+   <button class="primary" id="pushcloud">⬆ Push to cloud</button>
+   <button class="ghost" id="pullcloud">⬇ Pull from cloud</button>
+  </div>
+  <p class="hint" id="synctime"></p>
+  <details style="margin-top:10px"><summary class="muted" style="cursor:pointer">How to get a token (one time)</summary>
+   <p class="hint">GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic). Give it a name, set Expiration to <b>No expiration</b>, check ONLY the <b>gist</b> scope, generate, and copy it here. It only grants access to gists.</p>
+  </details>
  </section>
  <section id="data" class="view">
   <div class="banner" id="storestatus"></div>
@@ -158,6 +177,7 @@ document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   t.classList.add('active');$('#'+t.dataset.v).classList.add('active');
   if(t.dataset.v==='hist')renderHistory();
   if(t.dataset.v==='data')renderData();
+  if(t.dataset.v==='sync')renderSync();
 });
 
 /* ---- DASHBOARD ---- */
@@ -231,9 +251,10 @@ function addExercise(pre){
    <input type="number" class="ssnum" min="1" placeholder="#" style="width:54px;display:none">
    <button class="flagbtn kg" title="entered in kg → convert to lbs">kg</button>
    <button class="rm" title="remove exercise">🗑</button></div>
-   <div class="sets"></div><button class="ghost addset" style="font-size:13px;padding:6px 10px">+ set</button>`;
+   <div class="sets"></div><button class="ghost addset" style="font-size:13px;padding:6px 10px">+ set</button>
+   <input type="text" class="exnote" placeholder="note (optional) — e.g. left shoulder sore" style="width:100%;margin-top:8px">`;
   const sets=bl.querySelector('.sets');
-  if(pre){bl.querySelector('.exname').value=pre.n;if(pre.ss){bl.querySelector('.ss').classList.add('on');bl.querySelector('.ssnum').style.display='inline-block';bl.querySelector('.ssnum').value=pre.ss.replace('SS','');}pre.s.forEach(([r,w])=>sets.appendChild(setRow(r,w)));}
+  if(pre){bl.querySelector('.exname').value=pre.n;if(pre.no)bl.querySelector('.exnote').value=pre.no;if(pre.ss){bl.querySelector('.ss').classList.add('on');bl.querySelector('.ssnum').style.display='inline-block';bl.querySelector('.ssnum').value=pre.ss.replace('SS','');}pre.s.forEach(([r,w])=>sets.appendChild(setRow(r,w)));}
   else{sets.appendChild(setRow());sets.appendChild(setRow());}
   bl.querySelector('.addset').onclick=()=>{sets.appendChild(setRow());renumber();};
   bl.querySelector('.rm').onclick=()=>bl.remove();
@@ -242,7 +263,7 @@ function addExercise(pre){
   $('#exlist').appendChild(bl);renumber();
 }
 $('#addex').onclick=()=>addExercise();
-function resetLogger(){$('#exlist').innerHTML='';editId=null;$('#editbanner').style.display='none';$('#cancel').style.display='none';$('#save').textContent='Save workout';$('#wdate').value=new Date().toISOString().slice(0,10);$('#wbw').value='';addExercise();}
+function resetLogger(){$('#exlist').innerHTML='';editId=null;$('#editbanner').style.display='none';$('#cancel').style.display='none';$('#save').textContent='Save workout';$('#wdate').value=new Date().toISOString().slice(0,10);$('#wbw').value='';$('#wnote').value='';addExercise();}
 $('#cancel').onclick=resetLogger;
 function gatherWorkout(){
   const date=$('#wdate').value,bw=$('#wbw').value.trim();
@@ -259,23 +280,25 @@ function gatherWorkout(){
     });
     if(!sets.length)return;
     const tg=tagExercise(name);
-    ex.push({n:name,b:tg.b,c:tg.c,m:tg.m,ss:ssOn?('SS'+ssNum):'',u:kgOn?'kg':'lb',s:sets});
+    const note=bl.querySelector('.exnote').value.trim();
+    ex.push({n:name,b:tg.b,c:tg.c,m:tg.m,ss:ssOn?('SS'+ssNum):'',u:kgOn?'kg':'lb',s:sets,no:note});
   });
   if(!ex.length)return null;
-  return {d:date,bw:bw?+bw:null,ex};
+  const wnote=$('#wnote').value.trim();
+  return {d:date,bw:bw?+bw:null,note:wnote,ex};
 }
 $('#save').onclick=()=>{
   const w=gatherWorkout();if(!w){toast('Add at least one exercise with a set');return;}
   if(editId){const i=RECORDS.findIndex(r=>r.id===editId);w.id=editId;RECORDS[i]=w;}
   else{w.id='w'+Date.now();RECORDS.push(w);}
   RECORDS.sort((a,b)=>a.d<b.d?-1:1);persist();refreshDashboard();
-  toast(editId?'Workout updated':'Workout saved');resetLogger();
+  toast(editId?'Workout updated':'Workout saved');autoPush();resetLogger();
   document.querySelector('[data-v="hist"]').click();
 };
 function editWorkout(id){
   const w=RECORDS.find(r=>r.id===id);if(!w)return;
   $('#exlist').innerHTML='';editId=id;
-  $('#wdate').value=w.d;$('#wbw').value=w.bw||'';
+  $('#wdate').value=w.d;$('#wbw').value=w.bw||'';$('#wnote').value=w.note||'';
   w.ex.forEach(e=>addExercise(e));
   $('#editbanner').style.display='block';$('#editbanner').textContent='Editing workout from '+fmtD(w.d)+'. Save to update, or Cancel.';
   $('#cancel').style.display='inline-block';$('#save').textContent='Update workout';
@@ -290,9 +313,11 @@ function renderHistory(){
     if(!q)return true;
     return w.d.includes(q)||w.ex.some(e=>e.n.toLowerCase().includes(q));
   }).map(w=>{
-    const sum=w.ex.map(e=>e.n+' ('+e.s.length+')').join(', ');
+    const sum=w.ex.map(e=>e.n+' ('+e.s.length+')'+(e.no?' 📝':'')).join(', ');
+    const notes=[];if(w.note)notes.push('<b>Workout:</b> '+w.note);w.ex.forEach(e=>{if(e.no)notes.push('<b>'+e.n+':</b> '+e.no);});
+    const noteHtml=notes.length?'<div class="sum" style="margin-top:6px;color:#c9b6e6">'+notes.join('<br>')+'</div>':'';
     return `<div class="hist"><div class="row" style="justify-content:space-between">
-      <div><div class="d">${fmtD(w.d)}${w.bw?' · '+w.bw+' lbs':''}</div><div class="sum">${sum}</div></div>
+      <div><div class="d">${fmtD(w.d)}${w.bw?' · '+w.bw+' lbs':''}</div><div class="sum">${sum}</div>${noteHtml}</div>
       <div class="row"><button class="ghost" data-edit="${w.id}">Edit</button><button class="danger" data-del="${w.id}">Delete</button></div></div></div>`;
   }).join('')||'<p class="muted">No workouts yet.</p>';
   $('#histlist').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editWorkout(b.dataset.edit));
@@ -310,7 +335,7 @@ function renderData(){
 }
 $('#expjson').onclick=()=>{dl('lftng_backup_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(RECORDS),'application/json');toast('Backup exported');};
 $('#impjson').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d))throw 0;RECORDS=d;persist();refreshDashboard();toast('Imported '+d.length+' workouts');renderData();}catch(err){toast('Invalid backup file');}};rd.readAsText(f);};
-function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10}))));return rows;}
+function setRows(){const rows=[];RECORDS.forEach(w=>w.ex.forEach(e=>e.s.forEach((s,i)=>rows.push({date:w.d,bodyweight:w.bw||'',base_exercise:e.b,category:e.c,modality:e.m,exercise:e.n,superset:e.ss||'',unit:e.u||'lb',set:i+1,reps:s[0],weight:s[1],volume:Math.round(s[0]*s[1]*10)/10,exercise_note:e.no||'',workout_note:w.note||''}))));return rows;}
 function summaryRows(){
   const ss=buildSessions(),by={};
   ss.forEach(s=>{const g=by[s.b]||(by[s.b]={base_exercise:s.b,category:s.c,modality:s.m,sessions:new Set(),sets:0,best_e1rm:0,best_date:'',top_weight:0,latest_e1rm:0,latest_date:''});
@@ -326,6 +351,54 @@ $('#expxlsx').onclick=()=>{
 };
 $('#expcsv').onclick=()=>{const r=setRows();if(!r.length){toast('No data to export');return;}const h=Object.keys(r[0]);const csv=[h.join(',')].concat(r.map(o=>h.map(k=>o[k]).join(','))).join('\n');dl('lftng_sets.csv',csv,'text/csv');toast('CSV exported');};
 function dl(name,content,type){const b=new Blob([content],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
+
+
+/* ---- SYNC: private GitHub Gist ---- */
+const GH={
+  token:()=>LS.get('lftng_ghtoken',''),
+  gistId:()=>LS.get('lftng_gistid',''),
+  hdr(){return{'Authorization':'token '+this.token(),'Accept':'application/vnd.github+json'};},
+  async findGist(){
+    const r=await fetch('https://api.github.com/gists?per_page=100',{headers:this.hdr()});
+    if(!r.ok)throw new Error('Auth failed ('+r.status+') — check your token');
+    const list=await r.json();
+    const g=list.find(g=>g.files&&g.files['lftng_data.json']);
+    return g?g.id:'';
+  },
+  async push(){
+    if(!this.token())throw new Error('Set your token first');
+    let id=this.gistId()||await this.findGist();
+    const body={description:'LFTNG workout data',files:{'lftng_data.json':{content:JSON.stringify(RECORDS)}}};
+    let r;
+    if(id){r=await fetch('https://api.github.com/gists/'+id,{method:'PATCH',headers:this.hdr(),body:JSON.stringify(body)});}
+    else{body.public=false;r=await fetch('https://api.github.com/gists',{method:'POST',headers:this.hdr(),body:JSON.stringify(body)});}
+    if(!r.ok)throw new Error('Push failed ('+r.status+')');
+    const d=await r.json();LS.set('lftng_gistid',d.id);LS.set('lftng_synced',new Date().toISOString());
+    return RECORDS.length;
+  },
+  async pull(){
+    if(!this.token())throw new Error('Set your token first');
+    let id=this.gistId()||await this.findGist();
+    if(!id)throw new Error('No cloud data found yet — Push from your main device first');
+    const r=await fetch('https://api.github.com/gists/'+id,{headers:this.hdr()});
+    if(!r.ok)throw new Error('Pull failed ('+r.status+')');
+    const d=await r.json();const f=d.files['lftng_data.json'];
+    let content=f.content; if(f.truncated){content=await (await fetch(f.raw_url)).text();}
+    const data=JSON.parse(content); if(!Array.isArray(data))throw new Error('Cloud data is invalid');
+    LS.set('lftng_gistid',id);RECORDS=data;persist();refreshDashboard();LS.set('lftng_synced',new Date().toISOString());
+    return RECORDS.length;
+  }
+};
+function renderSync(){
+  $('#ghtoken').value=GH.token();
+  const t=LS.get('lftng_synced','');
+  $('#synctime').textContent=t?('Last synced: '+new Date(t).toLocaleString()):'Not synced yet on this device.';
+  $('#syncstatus').textContent=GH.token()?'Token saved on this device. Auto-push is ON after each save.':'No token yet. Paste one below to enable sync.';
+}
+$('#savetoken').onclick=()=>{LS.set('lftng_ghtoken',$('#ghtoken').value.trim());toast('Token saved');renderSync();};
+$('#pushcloud').onclick=async()=>{try{toast('Pushing…');const n=await GH.push();toast('Pushed '+n+' workouts');renderSync();}catch(e){toast(e.message);}};
+$('#pullcloud').onclick=async()=>{try{toast('Pulling…');const n=await GH.pull();toast('Pulled '+n+' workouts');renderSync();}catch(e){toast(e.message);}};
+function autoPush(){if(GH.token())GH.push().then(()=>renderSync()).catch(e=>toast('Auto-sync: '+e.message));}
 
 /* ---- init ---- */
 load();resetLogger();refreshDashboard();
