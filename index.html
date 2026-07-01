@@ -443,6 +443,13 @@ function migrateGrip(){
       if(e.n!=='delt raise'){ e.n='delt raise'; ch=true; }
       if(e.b!=='delt raise'){ e.b='delt raise'; ch=true; }
     }
+    if(e.b==='pec deck'||e.b==='pec fly'||e.b==='chest fly'){
+      if(e.b==='pec deck'&&!/\bpec deck\b/i.test(e.no||'')){ e.no=e.no?('pec deck | '+e.no):'pec deck'; ch=true; }
+      if(!e.lat&&/\b(single|1a|1h|one arm)\b/i.test(e.n)){ e.lat='single'; ch=true; }
+      if(e.eq!=='machine'){ e.eq='machine'; ch=true; }
+      if(e.n!=='chest fly'){ e.n='chest fly'; ch=true; }
+      if(e.b!=='chest fly'){ e.b='chest fly'; ch=true; }
+    }
     if(ch)changed++;
   }
   if(changed){persist();}
@@ -468,7 +475,7 @@ function buildSessions(){
   for(const w of RECORDS){for(const e of w.ex){
     let vol=0,topw=0,best=0,bs=[0,0];
     for(const[r,wt]of e.s){vol+=r*wt;if(wt>topw)topw=wt;const x=e1rm(r,wt);if(x>best){best=x;bs=[r,wt];}}
-    const mods=[e.eq,e.ang,e.dir,e.grip,e.att,e.lat==='single'?'1-arm':''].filter(Boolean);
+    const mods=[e.eq,e.ang,e.dir,e.grip,e.att,e.lat==='single'?'unilateral':''].filter(Boolean);
     const vlabel=e.n+(mods.length?' · '+mods.join(' · '):'');
     const vk=[e.n,e.eq||'',e.ang||'',e.dir||'',e.grip||'',e.att||'',e.lat||''].join('|');
     out.push({d:w.d,n:e.n,vk,vlabel,b:e.b,c:e.c,m:e.m,eq:e.eq||'',ang:e.ang||'',dir:e.dir||'',grip:e.grip||'',att:e.att||'',lat:e.lat||'',e1rm:Math.round(best*10)/10,topw,vol:Math.round(vol),ts:bs[0]+'x'+(+bs[1])});
@@ -505,7 +512,7 @@ function refreshMovements(){
 }
 const DIMS=[['eq','Equipment'],['ang','Angle'],['dir','Direction'],['grip','Grip'],['att','Attachment'],['lat','Limb']];
 let filterState={};
-function dimLabel(k,v){ return k==='lat'?(v==='single'?'1-arm':v):v; }
+function dimLabel(k,v){ return k==='lat'?(v==='single'?'Unilateral':v):v; }
 function buildFilters(){
   const base=movesel.value, rows=SESS.filter(s=>s.b===base);
   filterState={}; let html='';
@@ -514,7 +521,7 @@ function buildFilters(){
     if(!nonEmpty.length) return;
     let o='<option value="__any__">'+label+'</option>';
     nonEmpty.forEach(v=>o+='<option value="'+v+'">'+dimLabel(k,v)+'</option>');
-    if(vals.includes('')) o+='<option value="__none__">(none)</option>';
+    if(vals.includes('')) o+='<option value="__none__">'+(k==='lat'?'Bilateral':'(none)')+'</option>';
     html+='<div><select class="filt" data-k="'+k+'">'+o+'</select></div>';
     filterState[k]='__any__';
   });
@@ -543,7 +550,7 @@ function matchingFor(){
 }
 let curIso=null, fullDay=false;
 function exRowHtml(e,dim){
-  const flags=[e.eq||'',e.ang||'',e.dir||'',e.lat==='single'?'single':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+  const flags=[e.eq||'',e.ang||'',e.dir||'',e.lat==='single'?'unilateral':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
   let vol=0,best=0;e.s.forEach(([r,w])=>{vol+=r*w;const x=w*(1+r/30);if(x>best)best=x;});
   return '<div style="margin-top:10px'+(dim?';opacity:.6':'')+'"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
     '<div class="setpills">'+e.s.map(([r,w])=>'<span class="setpill">'+r+' × '+(+w)+'</span>').join('')+'</div>'+
@@ -785,7 +792,7 @@ function renderHistory(){
   $('#histlist').innerHTML=(shown.map(w=>{
     let body='';
     w.ex.forEach(e=>{
-      const flags=[e.eq||'',e.ang||'',e.dir||'',e.lat==='single'?'single':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
+      const flags=[e.eq||'',e.ang||'',e.dir||'',e.lat==='single'?'unilateral':'',e.grip||'',e.att||'',e.u==='kg'?'kg':'',e.ss||''].filter(Boolean).join(' · ');
       body+='<div style="margin-top:9px"><b>'+e.n+'</b>'+(flags?' <span class="muted">('+flags+')</span>':'')+'</div>'+
         '<div class="setpills">'+e.s.map(([r,wt])=>'<span class="setpill">'+r+' × '+(+wt)+'</span>').join('')+'</div>'+
         (e.no?'<div class="muted" style="font-size:12px;margin-top:3px">📝 '+e.no+'</div>':'');
